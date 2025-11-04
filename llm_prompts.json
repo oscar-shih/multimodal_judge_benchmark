@@ -1,0 +1,5 @@
+{
+    "gemini_prompts": "You are a helpful assistant. Please answer the following question: {question}",
+    "qwen_prompts": "You are a helpful assistant. Please answer the following question: {question}",
+    "phi4_prompts": "You are a helpful assistant. Please answer the following question: {question}"
+}

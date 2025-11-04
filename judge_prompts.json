@@ -1,0 +1,4 @@
+{
+    "gpt5_judge_prompts": 
+    "You are a helpful assistant. Please judge the following question and answer: {question} {answer}. The answer is {answer}."
+}
