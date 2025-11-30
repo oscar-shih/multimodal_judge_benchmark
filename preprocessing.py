@@ -7,7 +7,21 @@ from PIL import Image
 
 def load_tt_datasets(dataset_name: str):
     ds = load_dataset(dataset_name)
-    ds = ds.remove_columns(["id", "source","source_url", "split", "license"])
+    cols_to_remove = ["id", "source", "source_url", "split", "license"]
+    
+    # helper to get columns from first split if it's a dict
+    if isinstance(ds, (DatasetDict, dict)):
+        sample_split = next(iter(ds))
+        existing_cols = ds[sample_split].column_names
+    else:
+        existing_cols = ds.column_names
+        
+    cols_to_remove = [c for c in cols_to_remove if c in existing_cols]
+    
+    if cols_to_remove:
+        ds = ds.remove_columns(cols_to_remove)
+        
+    ds = ds.filter(lambda x: x['task'] != 'Long-Context')
     return ds
 
 def truncate_audio(ds, truncate_duration):
