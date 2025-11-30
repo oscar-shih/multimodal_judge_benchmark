@@ -2,13 +2,14 @@ import os, json, random, time, io
 import scipy.io.wavfile
 import numpy as np
 from PIL import Image
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, HfApi
 from preprocessing import load_tt_datasets, push_to_hub, load_audio_datasets, load_image_datasets, load_video_datasets
 from google import genai
 from google.genai import types
 from google.genai.errors import ServerError
 from tqdm import tqdm
 from pydantic import BaseModel
+from datasets import Dataset, Audio, Image, Video
 
 class QAOutput(BaseModel):
     Answer: str
@@ -24,7 +25,6 @@ def with_retry(call, max_retries=6, base=1.0):
             sleep = base * (2 ** i) + random.uniform(0, 0.5)
             time.sleep(sleep)
         except Exception as e:
-             # Handle 429 specifically if wrapped in other exceptions or if ServerError is not catching it
             if "429" in str(e) or "Resource exhausted" in str(e):
                 sleep = base * (2 ** i) + random.uniform(0, 0.5)
                 time.sleep(sleep)
@@ -71,7 +71,6 @@ def format_full_question(row):
         else:
              parts.append("Options: " + str(options))
              
-    # Image datasets might have 'choices' instead of 'options'
     if row.get("choices") is not None:
         choices = row.get("choices")
         if isinstance(choices, list):
@@ -86,7 +85,6 @@ def generate_text_response(instruction: str, row: dict, model: str, client: gena
         def __missing__(self, key):
             return '{' + key + '}'
             
-    # Construct prompt with all available info
     prompt = instruction.format_map(_SafeDict(
         question=row.get('question', ''),
         task=row.get('task', '')
@@ -101,9 +99,9 @@ def generate_text_response(instruction: str, row: dict, model: str, client: gena
     if row.get("options") is not None:
         options = row.get("options")
         if isinstance(options, list):
-             prompt += "\n Options: " + "\n".join(options)
+            prompt += "\n Options: " + "\n".join(options)
         else:
-             prompt += "\n Options: " + str(options)
+            prompt += "\n Options: " + str(options)
 
     config = types.GenerateContentConfig(
         response_mime_type="application/json",
@@ -120,15 +118,25 @@ def generate_text_response(instruction: str, row: dict, model: str, client: gena
 def generate_audio_response(instruction: str, row: dict, model: str, client: genai.Client):
     prompt = instruction.format(question=row.get('question', ''))
     
-    audio_data = row['audio']['array']
-    sampling_rate = row['audio']['sampling_rate']
+    audio_entry = row['audio']
+    mime_type = "audio/wav"
     
-    # Convert audio to bytes (WAV)
-    with io.BytesIO() as bytes_io:
-        scipy.io.wavfile.write(bytes_io, sampling_rate, audio_data)
-        audio_bytes = bytes_io.getvalue()
+    if 'array' in audio_entry and audio_entry['array'] is not None:
+        audio_data = audio_entry['array']
+        sampling_rate = audio_entry['sampling_rate']
+        with io.BytesIO() as bytes_io:
+            scipy.io.wavfile.write(bytes_io, sampling_rate, audio_data)
+            audio_bytes = bytes_io.getvalue()
+    elif 'bytes' in audio_entry and audio_entry['bytes'] is not None:
+        audio_bytes = audio_entry['bytes']
+        if audio_bytes.startswith(b'RIFF'):
+            mime_type = "audio/wav"
+        elif audio_bytes.startswith(b'\xff\xfb') or audio_bytes.startswith(b'\xff\xf3') or audio_bytes.startswith(b'\xff\xf2') or audio_bytes.startswith(b'ID3'):
+            mime_type = "audio/mp3"
+    else:
+        raise ValueError(f"Audio data missing or invalid format: {audio_entry.keys()}")
     
-    part = types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav")
+    part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
     
     config = types.GenerateContentConfig(
         response_mime_type="application/json",
@@ -144,10 +152,7 @@ def generate_audio_response(instruction: str, row: dict, model: str, client: gen
 
 def generate_image_response(instruction: str, row: dict, model: str, client: genai.Client):
     prompt = instruction.format(question=row.get('question', ''))
-    
-    image = row['image'] # PIL Image
-    
-    # Check if options exist for image (some VQA has choices)
+    image = row['image']
     if row.get("choices"):
          prompt += "\n Options: " + str(row.get("choices"))
 
@@ -156,8 +161,6 @@ def generate_image_response(instruction: str, row: dict, model: str, client: gen
         response_schema=QAOutput
     )
 
-    # Convert PIL image to bytes if needed or pass directly if SDK supports.
-    # google-genai SDK often supports PIL Image directly, but converting to bytes is safer for compatibility.
     with io.BytesIO() as bytes_io:
         image.save(bytes_io, format="PNG")
         image_bytes = bytes_io.getvalue()
@@ -175,14 +178,8 @@ def generate_video_response(instruction: str, row: dict, model: str, client: gen
     prompt = instruction.format(question=row.get('question', ''))
     
     video_rel_path = row.get('video_path')
-    # Download or find video file
-    # Assuming USCECE/Video_datasets structure
     video_path = hf_hub_download(repo_id="USCECE/Video_datasets", repo_type="dataset", filename=video_rel_path, token=hf_token)
-    
-    # Upload file
-    video_file = client.files.upload(path=video_path)
-    
-    # Wait for processing
+    video_file = client.files.upload(file=video_path)
     while video_file.state.name == "PROCESSING":
         time.sleep(2)
         video_file = client.files.get(name=video_file.name)
@@ -197,43 +194,30 @@ def generate_video_response(instruction: str, row: dict, model: str, client: gen
 
     response = with_retry(lambda: client.models.generate_content(
         model=model,
-        contents=[{"role": "user", "parts": [video_file, {"text": prompt}]}],
+        contents=[video_file, prompt],
         config=config
     ))
     return response.text or ""
 
-def get_processed_ids(output_file):
-    processed = {}
-    if os.path.exists(output_file):
-        with open(output_file, "r") as f:
-            for line in f:
-                try:
-                    record = json.loads(line)
-                    modality = record.get("modality")
-                    rid = record.get("id")
-                    if modality and rid is not None:
-                        if modality not in processed:
-                            processed[modality] = set()
-                        processed[modality].add(rid)
-                except json.JSONDecodeError:
-                    continue
-    return processed
-
-def process_dataset(dataset_name, dataset_type, prompts, client, model, output_file, hf_token, processed_ids=None):
+def process_dataset(dataset_name, dataset_type, prompts, client, model, hf_token, processed_ids=None):
     print(f"Processing {dataset_name} ({dataset_type})...")
     
     if dataset_type == "text":
         ds = load_tt_datasets(dataset_name)
+        output_file = "gemini_tt_qa_pairs.jsonl"
     elif dataset_type == "audio":
         ds = load_audio_datasets(dataset_name, truncate_duration=30, truncated=False)
+        output_file = "gemini_audio_qa_pairs.jsonl"
     elif dataset_type == "image":
         ds = load_image_datasets(dataset_name, resized=False, resized_size=(0,0))
+        output_file = "gemini_image_qa_pairs.jsonl"
     elif dataset_type == "video":
         ds = load_video_datasets(dataset_name)
+        ds = ds.cast_column("video", Video(decode=False))
+        output_file = "gemini_video_qa_pairs.jsonl"
     else:
         return
 
-    # Determine prompts key
     if dataset_type == "text":
         instruction = prompts["gemini_prompts"]
     elif dataset_type == "audio":
@@ -246,8 +230,6 @@ def process_dataset(dataset_name, dataset_type, prompts, client, model, output_f
     if processed_ids is None:
         processed_ids = set()
 
-    # Check if file exists to resume? (Simplification: append mode)
-    
     for i, row in tqdm(enumerate(ds['train']), total=len(ds['train'])):
         if i in processed_ids:
             continue
@@ -259,7 +241,7 @@ def process_dataset(dataset_name, dataset_type, prompts, client, model, output_f
                 ref_reasoning = row.get('reasoning') or "None"
             elif dataset_type == "audio":
                 response_text = generate_audio_response(instruction, row, model, client)
-                ref_ans = row.get('caption') or row.get('answer') # specific to USCECE/Audio_datasets
+                ref_ans = row.get('caption') or row.get('answer')
                 ref_reasoning = "None"
             elif dataset_type == "image":
                 response_text = generate_image_response(instruction, row, model, client)
@@ -289,6 +271,109 @@ def process_dataset(dataset_name, dataset_type, prompts, client, model, output_f
             print(f"Error processing row {i}: {e}")
             continue
 
+def get_processed_ids(output_file):
+    processed = {}
+    if os.path.exists(output_file):
+        with open(output_file, "r") as f:
+            for line in f:
+                try:
+                    record = json.loads(line)
+                    modality = record.get("modality")
+                    rid = record.get("id")
+                    if modality and rid is not None:
+                        if modality not in processed:
+                            processed[modality] = set()
+                        processed[modality].add(rid)
+                except json.JSONDecodeError:
+                    continue
+    return processed
+
+def upload_results_as_dataset(dataset_name, dataset_type, jsonl_file, repo_name, hf_token):
+    if not os.path.exists(jsonl_file):
+        print(f"File {jsonl_file} not found, skipping upload.")
+        return
+
+    print(f"Preparing dataset for upload: {repo_name}...")
+    
+    with open(jsonl_file, "r") as f:
+        results = [json.loads(line) for line in f if line.strip()]
+    
+    if not results:
+        print("No results to upload.")
+        return
+
+    if dataset_type == "text":
+        ds_out = Dataset.from_list(results)
+    else:
+        if dataset_type == "audio":
+             src_ds = load_audio_datasets(dataset_name, truncate_duration=30, truncated=False)
+             media_col = "audio"
+        elif dataset_type == "image":
+             src_ds = load_image_datasets(dataset_name, resized=False, resized_size=(0,0))
+             media_col = "image"
+        elif dataset_type == "video":
+             src_ds = load_video_datasets(dataset_name)
+             src_ds = src_ds.cast_column("video", Video(decode=False))
+             media_col = "video"
+
+        data_to_push = []
+        api = HfApi(token=hf_token)
+        api.create_repo(repo_id=repo_name, repo_type="dataset", exist_ok=True, private=False)
+
+        for res in results:
+            idx = res['id']
+            item = res.copy()
+            
+            if idx < len(src_ds['train']):
+                src_item = src_ds['train'][idx]
+                
+                if dataset_type == "video":
+                    video_info = src_item[media_col]
+                    if video_info and 'path' in video_info:
+                        local_path = video_info['path']
+                        filename = os.path.basename(local_path)
+                        target_path = f"videos/{filename}"
+                        print(f"Uploading video {filename} to {repo_name}...")
+                        api.upload_file(
+                            path_or_fileobj=local_path,
+                            path_in_repo=target_path,
+                            repo_id=repo_name,
+                            repo_type="dataset"
+                        )
+                        item[media_col] = target_path
+                else:
+                    item[media_col] = src_item[media_col]
+            
+            data_to_push.append(item)
+            
+        ds_out = Dataset.from_list(data_to_push)
+    
+        if dataset_type == "audio":
+            ds_out = ds_out.cast_column("audio", Audio())
+        elif dataset_type == "image":
+            ds_out = ds_out.cast_column("image", Image())
+ 
+    print(f"Pushing {repo_name} to Hub...")
+    
+    if dataset_type == "video":
+        updated_jsonl_name = os.path.basename(jsonl_file)
+        
+        with open(updated_jsonl_name, "w") as f:
+            for item in data_to_push:
+                f.write(json.dumps(item, ensure_ascii=False) + "\n")
+                
+        print(f"Uploading updated {updated_jsonl_name} to {repo_name}...")
+        api.upload_file(
+            path_or_fileobj=updated_jsonl_name,
+            path_in_repo=updated_jsonl_name,
+            repo_id=repo_name,
+            repo_type="dataset"
+        )
+        print(f"Pushed {repo_name} (manual upload)")
+    else:
+        ds_out.push_to_hub(repo_name, token=hf_token, private=False)
+        print(f"Pushed {repo_name}")
+
 if __name__ == "__main__":
     api_path = "api.json"
     with open(api_path, "r") as f:
@@ -303,20 +388,27 @@ if __name__ == "__main__":
     with open(prompt_path, "r") as f:
         prompts = json.load(f)
 
-    # Define tasks
     tasks = [
-        ("USCECE/filtered-tt-datasets", "text"),
+        ("USCECE/Text_datasets", "text"),
         ("USCECE/Audio_datasets", "audio"),
         ("USCECE/Image_datasets", "image"),
         ("USCECE/Video_datasets", "video")
     ]
     
-    output_file = "gemini_multimodal_qa_pairs.jsonl"
-    
-    processed_progress = get_processed_ids(output_file)
-    
     for ds_name, ds_type in tasks:
-        existing_ids = processed_progress.get(ds_type, set())
-        process_dataset(ds_name, ds_type, prompts, client, model, output_file, hf_token, processed_ids=existing_ids)
+        if ds_type == "text":
+            output_file = "gemini_tt_qa_pairs.jsonl"
+        elif ds_type == "audio":
+            output_file = "gemini_audio_qa_pairs.jsonl"
+        elif ds_type == "image":
+            output_file = "gemini_image_qa_pairs.jsonl"
+        elif ds_type == "video":
+            output_file = "gemini_video_qa_pairs.jsonl"
+            
+        processed_ids = get_processed_ids(output_file).get(ds_type, set())
+        process_dataset(ds_name, ds_type, prompts, client, model, hf_token, processed_ids=processed_ids)
 
-    push_to_hub("USCECE/gemini-multimodal-QApairs", filename=output_file, private=False, token=hf_token)
+    upload_results_as_dataset("USCECE/Text_datasets", "text", "gemini_tt_qa_pairs.jsonl", "USCECE/gemini-tt-qa-pairs", hf_token)
+    upload_results_as_dataset("USCECE/Audio_datasets", "audio", "gemini_audio_qa_pairs.jsonl", "USCECE/gemini-audio-qa-pairs", hf_token)
+    upload_results_as_dataset("USCECE/Image_datasets", "image", "gemini_image_qa_pairs.jsonl", "USCECE/gemini-image-qa-pairs", hf_token)
+    upload_results_as_dataset("USCECE/Video_datasets", "video", "gemini_video_qa_pairs.jsonl", "USCECE/gemini-video-qa-pairs", hf_token)
