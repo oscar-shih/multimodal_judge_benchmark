@@ -397,7 +397,7 @@ if __name__ == "__main__":
     
     for ds_name, ds_type in tasks:
         if ds_type == "text":
-            output_file = "gemini_tt_qa_pairs.jsonl"
+            output_file = "gemini_text_qa_pairs.jsonl"
         elif ds_type == "audio":
             output_file = "gemini_audio_qa_pairs.jsonl"
         elif ds_type == "image":
@@ -408,7 +408,7 @@ if __name__ == "__main__":
         processed_ids = get_processed_ids(output_file).get(ds_type, set())
         process_dataset(ds_name, ds_type, prompts, client, model, hf_token, processed_ids=processed_ids)
 
-    upload_results_as_dataset("USCECE/Text_datasets", "text", "gemini_tt_qa_pairs.jsonl", "USCECE/gemini-tt-qa-pairs", hf_token)
+    upload_results_as_dataset("USCECE/Text_datasets", "text", "gemini_text_qa_pairs.jsonl", "USCECE/gemini-text-qa-pairs", hf_token)
     upload_results_as_dataset("USCECE/Audio_datasets", "audio", "gemini_audio_qa_pairs.jsonl", "USCECE/gemini-audio-qa-pairs", hf_token)
     upload_results_as_dataset("USCECE/Image_datasets", "image", "gemini_image_qa_pairs.jsonl", "USCECE/gemini-image-qa-pairs", hf_token)
     upload_results_as_dataset("USCECE/Video_datasets", "video", "gemini_video_qa_pairs.jsonl", "USCECE/gemini-video-qa-pairs", hf_token)
