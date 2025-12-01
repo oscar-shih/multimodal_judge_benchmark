@@ -215,3 +215,4 @@ api.json
 # data
 mini_benchmark_150.jsonl
 *_qa_pairs.jsonl
+*.jsonl
