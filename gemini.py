@@ -289,18 +289,8 @@ def get_processed_ids(output_file):
     return processed
 
 def upload_results_as_dataset(dataset_name, dataset_type, jsonl_file, repo_name, hf_token):
-    if not os.path.exists(jsonl_file):
-        print(f"File {jsonl_file} not found, skipping upload.")
-        return
-
-    print(f"Preparing dataset for upload: {repo_name}...")
-    
     with open(jsonl_file, "r") as f:
         results = [json.loads(line) for line in f if line.strip()]
-    
-    if not results:
-        print("No results to upload.")
-        return
 
     if dataset_type == "text":
         ds_out = Dataset.from_list(results)
