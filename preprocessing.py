@@ -21,7 +21,8 @@ def load_tt_datasets(dataset_name: str):
     if cols_to_remove:
         ds = ds.remove_columns(cols_to_remove)
         
-    ds = ds.filter(lambda x: x['task'] != 'Long-Context')
+    if "task" in ds.column_names:
+        ds = ds.filter(lambda x: x['task'] != 'Long-Context')
     return ds
 
 def truncate_audio(ds, truncate_duration):
@@ -35,7 +36,18 @@ def truncate_audio(ds, truncate_duration):
 
 def load_audio_datasets(dataset_name: str, truncate_duration: float, truncated: bool):
     ds = load_dataset(dataset_name)
-    ds = ds.remove_columns(["id", "source"])
+    cols_to_remove = ["id", "source"]
+    
+    # Check if dataset is a DatasetDict or Dataset
+    if isinstance(ds, (DatasetDict, dict)):
+        existing_cols = ds[next(iter(ds))].column_names
+    else:
+        existing_cols = ds.column_names
+        
+    cols_to_remove = [c for c in cols_to_remove if c in existing_cols]
+    
+    if cols_to_remove:
+        ds = ds.remove_columns(cols_to_remove)
     # TODO: Some audio clips are too long, we need to truncate them. Need to test the longest truncation length for different models.
     if truncated:
         ds = truncate_audio(ds, truncate_duration)
@@ -51,7 +63,17 @@ def resize_image(ds, resized_size):
 
 def load_image_datasets(dataset_name: str, resized: bool, resized_size: (int, int)):
     ds = load_dataset(dataset_name)
-    ds = ds.remove_columns(["id", "source"])
+    cols_to_remove = ["id", "source"]
+    
+    if isinstance(ds, (DatasetDict, dict)):
+        existing_cols = ds[next(iter(ds))].column_names
+    else:
+        existing_cols = ds.column_names
+        
+    cols_to_remove = [c for c in cols_to_remove if c in existing_cols]
+    
+    if cols_to_remove:
+        ds = ds.remove_columns(cols_to_remove)
     if resized:
         ds = resize_image(ds, resized_size)
     return ds
@@ -59,7 +81,17 @@ def load_image_datasets(dataset_name: str, resized: bool, resized_size: (int, in
 def load_video_datasets(dataset_name: str):
     ds = load_dataset(dataset_name)
     # TODO: Check the columns of the dataset, and remove the columns that are not needed
-    ds = ds.remove_columns(["id", "split", "source", "duration_sec"])
+    cols_to_remove = ["id", "split", "source", "duration_sec"]
+    
+    if isinstance(ds, (DatasetDict, dict)):
+        existing_cols = ds[next(iter(ds))].column_names
+    else:
+        existing_cols = ds.column_names
+        
+    cols_to_remove = [c for c in cols_to_remove if c in existing_cols]
+    
+    if cols_to_remove:
+        ds = ds.remove_columns(cols_to_remove)
     return ds
 
 def push_to_hub(repo_id: str, private: bool = True, filename: str = None, token: str = None):

@@ -9,7 +9,7 @@ from google.genai import types
 from google.genai.errors import ServerError
 from tqdm import tqdm
 from pydantic import BaseModel
-from datasets import Video
+from datasets import Video, load_dataset
 
 class JudgeOutput(BaseModel):
     Score: int
@@ -135,13 +135,21 @@ def evaluate_image(instruction, row_data, original_row, model, client):
     ))
     return response.text or ""
 
-def evaluate_video(instruction, row_data, original_row, model, client, hf_token=None):
+def evaluate_video(instruction, row_data, original_row, model, client, hf_token=None, repo_id="USCECE/Video_datasets"):
     prompt = construct_judge_prompt(instruction, row_data)
     video_rel_path = original_row.get('video_path')
-    if not video_rel_path and 'video' in original_row and isinstance(original_row['video'], dict):
-         video_rel_path = original_row['video'].get('path')
+    
+    if not video_rel_path:
+        if 'video' in original_row:
+            if isinstance(original_row['video'], dict):
+                video_rel_path = original_row['video'].get('path')
+            elif isinstance(original_row['video'], str):
+                video_rel_path = original_row['video']
+    
+    if video_rel_path and video_rel_path.startswith("./"):
+        video_rel_path = video_rel_path[2:]
         
-    video_path = hf_hub_download(repo_id="USCECE/Video_datasets", repo_type="dataset", filename=video_rel_path, token=hf_token)
+    video_path = hf_hub_download(repo_id=repo_id, repo_type="dataset", filename=video_rel_path, token=hf_token)
     video_file = client.files.upload(file=video_path)
     while video_file.state.name == "PROCESSING":
         time.sleep(2)
@@ -181,7 +189,7 @@ def process_judgement(dataset_name, dataset_type, prompts, client, model, hf_tok
         return
 
     instruction = prompts["judge_prompts"]
-    output_file = f"judge_results_{dataset_type}.jsonl"
+    output_file = generated_file.replace(".jsonl", "_results.jsonl")
     
     processed_ids = set()
     if os.path.exists(output_file):
@@ -215,7 +223,8 @@ def process_judgement(dataset_name, dataset_type, prompts, client, model, hf_tok
             elif dataset_type == "image":
                 response_text = evaluate_image(instruction, res, original_row, model, client)
             elif dataset_type == "video":
-                response_text = evaluate_video(instruction, res, original_row, model, client, hf_token)
+                # Use the main Video_datasets repo for the video files, assuming filenames match
+                response_text = evaluate_video(instruction, res, original_row, model, client, hf_token, repo_id="USCECE/Video_datasets")
             
             score, judgement, error = parse_response(response_text)
             
@@ -240,7 +249,7 @@ if __name__ == "__main__":
         api_keys = json.load(f)
     gemini_api_key = api_keys[0]["gemini_token"]
     hf_token = api_keys[0]["hf_token"]
-    model = "gemini-3-pro-preview" 
+    model = "gemini-2.5-pro" 
 
     client = genai.Client(api_key=gemini_api_key)
 
@@ -249,11 +258,31 @@ if __name__ == "__main__":
         prompts = json.load(f)
 
     tasks = [
-        ("USCECE/Audio_datasets", "audio", "gemini_audio_qa_pairs.jsonl", None),
-        ("USCECE/Image_datasets", "image", "gemini_image_qa_pairs.jsonl", None),
-        ("USCECE/Text_datasets", "text", "gemini_text_qa_pairs.jsonl", None),
-        ("USCECE/Video_datasets", "video", "gemini_video_qa_pairs.jsonl", None)
+        ("USCECE/phi4_tt", "text", "qwen2.5_text_qa_pairs.jsonl", None),
+        ("USCECE/phi4_video", "video", "phi4_video_qa_pairs.jsonl", None),
+        ("USCECE/phi4_image", "image", "phi4_image_qa_pairs.jsonl", None),
+        ("USCECE/phi4_audio", "audio", "phi4_audio_qa_pairs.jsonl", None),
     ]
     
     for ds_name, ds_type, gen_file, target_ids in tasks:
+        if not os.path.exists(gen_file):
+            print(f"Generating {gen_file} from {ds_name}...")
+            try:
+                ds = load_dataset(ds_name, split="train")
+                with open(gen_file, "w") as f:
+                    for i, row in enumerate(ds):
+                        # Use index as ID if not present or to be safe
+                        clean_row = {
+                            "id": i, 
+                            "question": row.get("question"),
+                            "reference_answer": row.get("reference_answer"),
+                            "reference_reasoning": row.get("reference_reasoning"),
+                            "generated_answer": row.get("generated_answer"),
+                            "generated_reasoning": row.get("generated_reasoning")
+                        }
+                        f.write(json.dumps(clean_row, ensure_ascii=False) + "\n")
+            except Exception as e:
+                print(f"Failed to generate {gen_file}: {e}")
+                continue
+                    
         process_judgement(ds_name, ds_type, prompts, client, model, hf_token, gen_file, target_ids=target_ids)
