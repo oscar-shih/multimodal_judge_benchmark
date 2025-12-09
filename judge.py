@@ -249,7 +249,7 @@ if __name__ == "__main__":
         api_keys = json.load(f)
     gemini_api_key = api_keys[0]["gemini_token"]
     hf_token = api_keys[0]["hf_token"]
-    model = "gemini-2.5-pro" 
+    model = "gemini-2.5-flash" 
 
     client = genai.Client(api_key=gemini_api_key)
 
@@ -258,7 +258,7 @@ if __name__ == "__main__":
         prompts = json.load(f)
 
     tasks = [
-        ("USCECE/phi4_tt", "text", "qwen2.5_text_qa_pairs.jsonl", None),
+        ("USCECE/phi4_tt", "text", "phi4_text_qa_pairs.jsonl", None),
         ("USCECE/phi4_video", "video", "phi4_video_qa_pairs.jsonl", None),
         ("USCECE/phi4_image", "image", "phi4_image_qa_pairs.jsonl", None),
         ("USCECE/phi4_audio", "audio", "phi4_audio_qa_pairs.jsonl", None),
