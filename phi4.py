@@ -89,8 +89,8 @@ Final Answer: <Concise completion or response>
 """
 
 def run_audio_pipeline():
-    print("\n=== [AUDIO] Loading dataset USCECE/Audio_datasets ===")
-    ds = load_dataset("USCECE/Audio_datasets", split="train")
+    print("\n=== [AUDIO] Loading dataset multi-judge/Audio_datasets ===")
+    ds = load_dataset("multi-judge/Audio_datasets", split="train")
 
     ds = ds.cast_column("audio", Audio(decode=False))
 
@@ -291,8 +291,8 @@ def run_phi4_image(task, question, choices, image):
     return text.strip()
 
 def run_image_pipeline():
-    print("\n=== [IMAGE] Loading dataset USCECE/Image_datasets ===")
-    ds = load_dataset("USCECE/Image_datasets", split="train")
+    print("\n=== [IMAGE] Loading dataset multi-judge/Image_datasets ===")
+    ds = load_dataset("multi-judge/Image_datasets", split="train")
     print(f"Loaded {len(ds)} image samples.")
 
     results = {
@@ -476,8 +476,8 @@ def run_phi4_tt(row):
     return text
 
 def run_tt_pipeline():
-    print("\n=== [TT] Loading dataset USCECE/tt_datasets ===")
-    ds = load_dataset("USCECE/tt_datasets", split="train")
+    print("\n=== [TT] Loading dataset multi-judge/tt_datasets ===")
+    ds = load_dataset("multi-judge/tt_datasets", split="train")
     ds = ds.filter(lambda x: x["task"] != "Long-Context")
     print(f"Loaded {len(ds)} samples (filtered).")
 

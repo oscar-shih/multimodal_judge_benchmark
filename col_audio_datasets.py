@@ -341,7 +341,7 @@ combined = combined.map(assign_task)
 new_column_order = ["id", "task"] + [col for col in combined.column_names if col not in ["id", "task"]]
 combined = combined.select_columns(new_column_order)
 
-TARGET_REPO = "USCECE/Audio_datasets"
+TARGET_REPO = "multi-judge/Audio_datasets"
 
 combined.push_to_hub(
     TARGET_REPO,

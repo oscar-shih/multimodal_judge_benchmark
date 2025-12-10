@@ -178,7 +178,7 @@ def generate_video_response(instruction: str, row: dict, model: str, client: gen
     prompt = instruction.format(question=row.get('question', ''))
     
     video_rel_path = row.get('video_path')
-    video_path = hf_hub_download(repo_id="USCECE/Video_datasets", repo_type="dataset", filename=video_rel_path, token=hf_token)
+    video_path = hf_hub_download(repo_id="multi-judge/Video_datasets", repo_type="dataset", filename=video_rel_path, token=hf_token)
     video_file = client.files.upload(file=video_path)
     while video_file.state.name == "PROCESSING":
         time.sleep(2)
@@ -379,10 +379,10 @@ if __name__ == "__main__":
         prompts = json.load(f)
 
     tasks = [
-        ("USCECE/Text_datasets", "text"),
-        ("USCECE/Audio_datasets", "audio"),
-        ("USCECE/Image_datasets", "image"),
-        ("USCECE/Video_datasets", "video")
+        ("multi-judge/Text_datasets", "text"),
+        ("multi-judge/Audio_datasets", "audio"),
+        ("multi-judge/Image_datasets", "image"),
+        ("multi-judge/Video_datasets", "video")
     ]
     
     for ds_name, ds_type in tasks:
@@ -398,7 +398,7 @@ if __name__ == "__main__":
         processed_ids = get_processed_ids(output_file).get(ds_type, set())
         process_dataset(ds_name, ds_type, prompts, client, model, hf_token, processed_ids=processed_ids)
 
-    upload_results_as_dataset("USCECE/Text_datasets", "text", "gemini_text_qa_pairs.jsonl", "USCECE/gemini-text-qa-pairs", hf_token)
-    upload_results_as_dataset("USCECE/Audio_datasets", "audio", "gemini_audio_qa_pairs.jsonl", "USCECE/gemini-audio-qa-pairs", hf_token)
-    upload_results_as_dataset("USCECE/Image_datasets", "image", "gemini_image_qa_pairs.jsonl", "USCECE/gemini-image-qa-pairs", hf_token)
-    upload_results_as_dataset("USCECE/Video_datasets", "video", "gemini_video_qa_pairs.jsonl", "USCECE/gemini-video-qa-pairs", hf_token)
+    upload_results_as_dataset("multi-judge/Text_datasets", "text", "gemini_text_qa_pairs.jsonl", "multi-judge/gemini-text-qa-pairs", hf_token)
+    upload_results_as_dataset("multi-judge/Audio_datasets", "audio", "gemini_audio_qa_pairs.jsonl", "multi-judge/gemini-audio-qa-pairs", hf_token)
+    upload_results_as_dataset("multi-judge/Image_datasets", "image", "gemini_image_qa_pairs.jsonl", "multi-judge/gemini-image-qa-pairs", hf_token)
+    upload_results_as_dataset("multi-judge/Video_datasets", "video", "gemini_video_qa_pairs.jsonl", "multi-judge/gemini-video-qa-pairs", hf_token)

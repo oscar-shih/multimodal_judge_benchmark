@@ -4,7 +4,7 @@
 """
 Image, Video, Text & Audio QA inference script for Qwen2.5-Omni-3B.
 
-Image dataset (e.g. USCECE/Image_datasets):
+Image dataset (e.g. multi-judge/Image_datasets):
 - image        (HF Image object)
 - id           (str or int)
 - question     (str)
@@ -23,7 +23,7 @@ Each line in metadata.jsonl:
 - task:        str
 - source:      str, optional
 
-Text dataset (e.g. USCECE/tt_datasets):
+Text dataset (e.g. multi-judge/tt_datasets):
 - id:          str
 - task:        str
 - question:    str
@@ -38,7 +38,7 @@ Text dataset (e.g. USCECE/tt_datasets):
 - license:     str
 - constraints: dict, optional
 
-Audio dataset (e.g. USCECE/Audio_datasets):
+Audio dataset (e.g. multi-judge/Audio_datasets):
 - id:          int/str
 - audio:       datasets.Audio ({"array": np.ndarray, "sampling_rate": int})
 - question:    str
@@ -922,7 +922,7 @@ def run_video_inference_from_metadata(
 
 
 # ===========================
-# Audio inference (USCECE/Audio_datasets)
+# Audio inference (multi-judge/Audio_datasets)
 # ===========================
 def load_hf_audio_bytes(audio_feature):
     """
@@ -957,7 +957,7 @@ def run_audio_inference(
 ) -> None:
     """
     Run Qwen2.5-Omni on an *audio* HF dataset.
-    Dataset: USCECE/Audio_datasets
+    Dataset: multi-judge/Audio_datasets
     Fields:
       - id:        int/str
       - audio:     datasets.Audio  (we will cast to Audio(decode=False))

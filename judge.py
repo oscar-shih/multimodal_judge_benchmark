@@ -135,7 +135,7 @@ def evaluate_image(instruction, row_data, original_row, model, client):
     ))
     return response.text or ""
 
-def evaluate_video(instruction, row_data, original_row, model, client, hf_token=None, repo_id="USCECE/Video_datasets"):
+def evaluate_video(instruction, row_data, original_row, model, client, hf_token=None, repo_id="multi-judge/Video_datasets"):
     prompt = construct_judge_prompt(instruction, row_data)
     video_rel_path = original_row.get('video_path')
     
@@ -224,7 +224,7 @@ def process_judgement(dataset_name, dataset_type, prompts, client, model, hf_tok
                 response_text = evaluate_image(instruction, res, original_row, model, client)
             elif dataset_type == "video":
                 # Use the main Video_datasets repo for the video files, assuming filenames match
-                response_text = evaluate_video(instruction, res, original_row, model, client, hf_token, repo_id="USCECE/Video_datasets")
+                response_text = evaluate_video(instruction, res, original_row, model, client, hf_token, repo_id="multi-judge/Video_datasets")
             
             score, judgement, error = parse_response(response_text)
             
@@ -258,10 +258,10 @@ if __name__ == "__main__":
         prompts = json.load(f)
 
     tasks = [
-        ("USCECE/phi4_tt", "text", "phi4_text_qa_pairs.jsonl", None),
-        ("USCECE/phi4_video", "video", "phi4_video_qa_pairs.jsonl", None),
-        ("USCECE/phi4_image", "image", "phi4_image_qa_pairs.jsonl", None),
-        ("USCECE/phi4_audio", "audio", "phi4_audio_qa_pairs.jsonl", None),
+        ("multi-judge/phi4_tt", "text", "phi4_text_qa_pairs.jsonl", None),
+        ("multi-judge/phi4_video", "video", "phi4_video_qa_pairs.jsonl", None),
+        ("multi-judge/phi4_image", "image", "phi4_image_qa_pairs.jsonl", None),
+        ("multi-judge/phi4_audio", "audio", "phi4_audio_qa_pairs.jsonl", None),
     ]
     
     for ds_name, ds_type, gen_file, target_ids in tasks:

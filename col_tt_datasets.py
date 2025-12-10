@@ -322,26 +322,26 @@ def push_to_hub(repo_id: str, private: bool = True, filename: str = None, token:
     )
     print(f"Pushed {filename} to hf://datasets/{repo_id} (private={private})")
 
-# if __name__ == "__main__":
-#     out_path = "mini_benchmark_150.jsonl"
-#     if not os.path.exists(out_path):
-#         collect_opencode_reasoning(20)
-#         collect_openmath_reasoning(20)
-#         collect_gpqa_diamond(10)
-#         collect_drop(20)
-#         collect_hellaswag(15)
-#         collect_socialiqa(15)
-#         collect_ifeval(15)
-#         collect_followbench(15)
-#         collect_longbench_v2(20)
-#         print(f"Total collected: {len(ALL_ROWS)}")
+if __name__ == "__main__":
+    out_path = "mini_benchmark_150.jsonl"
+    if not os.path.exists(out_path):
+        collect_opencode_reasoning(20)
+        collect_openmath_reasoning(20)
+        collect_gpqa_diamond(10)
+        collect_drop(20)
+        collect_hellaswag(15)
+        collect_socialiqa(15)
+        collect_ifeval(15)
+        collect_followbench(15)
+        collect_longbench_v2(20)
+        print(f"Total collected: {len(ALL_ROWS)}")
 
-#         with open(out_path, "w", encoding="utf-8") as f:
-#             for row in ALL_ROWS:
-#                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
-#         print(f"Saved -> {out_path}")
+        with open(out_path, "w", encoding="utf-8") as f:
+            for row in ALL_ROWS:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        print(f"Saved -> {out_path}")
 
-#     with open("api.json", "r", encoding="utf-8") as f:
-#         api_keys = json.load(f)
-#     hf_token = api_keys[0]["hf_token"]
-#     push_to_hub("Oscarshih/ee599-tt-datasets", filename=out_path, private=True, token=hf_token)
+    with open("api.json", "r", encoding="utf-8") as f:
+        api_keys = json.load(f)
+    hf_token = api_keys[0]["hf_token"]
+    push_to_hub("Oscarshih/ee599-tt-datasets", filename=out_path, private=True, token=hf_token)
